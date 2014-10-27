@@ -1,0 +1,88 @@
+Log
+========================================
+10/25
+  - convert MP4 to MP3
+      $ ffmpeg -i xxx.mp4 -f mp3 -ab 192000 -vn xxx.mp3
+  - convert MP4 to WAV
+      $ ffmpeg -i xxx.mp4 xxx.wav
+  - Sox has python binding (PySox), but cannot process signal frame-by-frame.
+
+----- Decision: use "ffmpeg + scipy" to process WAV.
+
+  - harma spectrogram -> use matplotlib (Matlab-like) (http://goo.gl/w86Lrh)
+  - some useful MLT commands
+      - melt [options] [producer [name=value]* ]+
+        Options:
+          -audio-track | -hide-video               Add an audio-only track
+      - concatenate videos
+        $ melt *.mp4 -consumer avformat:out.mp4 vcodec=libxvid
+  - some search results of speed-up in MLT
+    - the MLT speed-up plugin
+      - plugin itself (http://goo.gl/rrr0YI)
+      - email by author (not tested) (http://goo.gl/jlxFsK)
+    - MLT Video Control Protocol doc, containing speed-up (http://goo.gl/oPjKlL)
+    - MLT tutorial
+      - MLT doc (http://goo.gl/zRv3JP)
+      - MLT XML doc (http://goo.gl/NtYEbp)
+      - some MLT notes on StackOverflow (http://goo.gl/uXJY3x)
+      - MLT tutorial on Youtube (http://goo.gl/okcBmd)
+  - seems easier to reverse-engineer Kdenlive render script
+    - "script.sh" refers "script.sh.mlt" and can be run by bash
+    - "script.sh.mlt" contains frame index and the "slowmotion" producer.
+    - MLT XML doc might be helpful (above)
+10/26
+  - XML notes
+    - only the following tags are needed
+        <mlt>
+          <producer>
+          <playlist>
+            <entry>
+    - position of producers can be switched
+    - specify speed ratio in "slowmotion" and "resource" (input file name)
+        e.g.
+          <producer in="0" out="2440" id="slowmotion:2:1.23">
+            <property name="resource">Desktop/exp/short.mp4?1.23</property>
+    - add audio to another playlist above the video playlist
+  - it's OK to run script.sh without specifying pid
+  - get properties of a video/audio (including number of frames) by
+      $ melt short.mp4 -consumer xml
+  - in kdenlive, get precise timestamp when cutting clips by Shift+R
+
+----- Decision: a master python file that does all the things.
+                  1. decide speed ratio => generate a list of segments + ratio
+                  2. call 'sox' to generate audio segments
+                  3. generate XML, BASH script
+                  4. run BASH script
+
+  - start writing Harma
+
+
+
+
+
+
+
+
+
+
+Schedule
+========================================
+(1 week)
+  - Find a library for syllable-detection from audio. Would be better if Python code exists.
+
+(3 week)
+  - Detect speedup ratio of each video segment.
+  - Use linux tool to extract .wav from video file.
+  - Use .wav file for now. The actual audio format depends on what is available by processing the video file.
+  - Incorporate the syllable-detection library mentioned above.
+  - Rewrite existing framework (in Matlab) to Python.
+
+(2 week)
+  - Research on MLT framework, a command-line video editing tool.
+  - Few document, probably needs lots of trial-and-error.
+
+(1 week)
+  - Combine all of the above
+  - Extract audio from video
+  - Detect speedup ratio from audio
+  - Feed the speedup ratio in MLT framework, generate the output video.

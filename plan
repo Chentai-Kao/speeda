@@ -1,0 +1,6 @@
+1. Rewrite run.m to speeda.py (load audio, output speed-up ratio)
+2. Search for syllable detection Python. If not, rewrite Harma.
+3. Extend speeda.py to load video, convert to audio, detect speed-up ratio)
+   (no need to output speed-up ratio)
+4. Search for MLT framework usage.
+5. Extend speeda.py to use MLT, output video.

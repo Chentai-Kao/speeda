@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+# USAGE dspeed [VIDEO] [OUTPUT] [SPEED]
+
+# extract audio
+`ffmpeg -y -i #{ARGV[0]} -vn -f wav vn-#{ARGV[0]}.wav`
+# extract video
+`ffmpeg -y -i #{ARGV[0]} -an an-#{ARGV[0]}`
+# speed audio
+`sox vn-#{ARGV[0]}.wav svn-#{ARGV[0]}.wav tempo -s #{ARGV[2]}`
+# speed video
+pts_speed = sprintf "%.02f", 1.0 / ARGV[2].to_f
+`ffmpeg -y -i an-#{ARGV[0]} -filter:v "setpts=#{pts_speed}*PTS" -an san-#{ARGV[0]}`
+# combining 
+`ffmpeg -y -i san-#{ARGV[0]} -i svn-#{ARGV[0]}.wav -c copy -shortest #{ARGV[1]}`
+# cleaning

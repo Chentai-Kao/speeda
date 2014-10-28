@@ -19,7 +19,7 @@ function run(inFileName, outFileName, speed)
 
   % Run harma syllable segmentation
   [syllableStarts, syllableEnds] = detectSyllables(original, Fs);
-
+  
   % Round timestamp to align with video frames (30 fps)
   %[syllableStarts, syllableEnds] = alignToFrame(syllableStarts, syllableEnds);
 
@@ -28,7 +28,7 @@ function run(inFileName, outFileName, speed)
 
   % Filter the syllable density by median.
   densityMedian = calcDensityMedian(density);
-
+  
   % Find valleys for segmentation.
   segPoints = calcSegments(densityMedian);
 
@@ -40,11 +40,11 @@ function run(inFileName, outFileName, speed)
                                       audioLength);
 
   % output ratio to file
-  of = fopen(outFileName, 'w');
-  for m = 1:length(starts)
-    fprintf(of, '%d %d %.2f\n', starts(m), ends(m), ratios(m));
-  end
-  fclose(of);
+%  of = fopen(outFileName, 'w');
+%  for m = 1:length(starts)
+%    fprintf(of, '%d %d %.2f\n', starts(m), ends(m), ratios(m));
+%  end
+%  fclose(of);
 
   % plot
   if showPlot
@@ -182,7 +182,7 @@ end
 % AUDIO is a row vector.
 function [syllableStarts, syllableEnds] = detectSyllables(audio, Fs)
   [syllables, Fs, S, F, T, P] =...
-      harmaSyllableSeg(audio', Fs, kaiser(512), 64, 128, 20);
+      harmaSyllableSeg(audio', Fs, kaiser(128), 64, 128, 20);
   syllableStarts = zeros(1, length(syllables));
   syllableEnds = zeros(1, length(syllables));
   for m = 1:length(syllables)
@@ -231,7 +231,7 @@ function density = calcDensity(audio, Fs, syllableStarts, syllableEnds)
 end
 
 function densityMedian = calcDensityMedian(density)
-  windowSize = 150;
+  windowSize = 151;
   densityMedian = medfilt1(density, windowSize);
 end
 

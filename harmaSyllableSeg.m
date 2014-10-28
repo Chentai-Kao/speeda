@@ -61,7 +61,7 @@ function [syllables,FS,S,F,T,P] = harmaSyllableSeg(signal,FS,WINDOW,NOVERLAP,NFF
 %figure;
 %subplot(2,1,1);
 %surf(T,F,10*log10(abs(P)),'EdgeColor','none');
-mag = abs(S);
+%mag = abs(S);
 %surf(T,F,10*log10(mag),'EdgeColor','none');
 %axis xy; axis tight; colormap(jet); view(0,90);
 %xlabel('Time');

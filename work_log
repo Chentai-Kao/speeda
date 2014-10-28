@@ -54,8 +54,15 @@ Log
                   3. generate XML, BASH script
                   4. run BASH script
 
-  - start writing Harma
-
+  - Start writing Harma
+    - Use specgram for mode='magnitude' to get absolute value.
+      - This requires upgrading matplotlib to 1.4.2 manually.
+        (NOTE: the apt-get version of ubuntu is outdated)
+    - Fixed 2 bugs in harma.
+      - Normalize audio signal to [-1, 1] value range.
+      - Turns out I missed two blocks of Harma code.
+    - Now the detected syllables (Python v.s. Matlab) are identical.
+    - TODO: Harma code needs refactoring.
 
 
 
@@ -86,3 +93,14 @@ Schedule
   - Extract audio from video
   - Detect speedup ratio from audio
   - Feed the speedup ratio in MLT framework, generate the output video.
+
+
+
+
+
+
+
+Note for porting to AWS machine
+========================================
+- make sure matplotlib is updated (1.4.2). The apt-get version is out-dated.
+  Need to build and install from source.

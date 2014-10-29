@@ -1,10 +1,11 @@
 #!/usr/bin/python
 
-import pylab
+import os
 import subprocess
 import warnings
 
 import numpy as np
+import pylab
 import scipy
 import scipy.signal
 import scipy.io.wavfile
@@ -23,7 +24,9 @@ def calc_speedup_ratio(file_name, speed):
     # Create all segments.
     segments = []
     for i in xrange(1, len(start_points)):
-        s = Segment(start_points[i - 1], start_points[i], speedup_ratio[i - 1])
+        s = Segment(float(start_points[i - 1]) / 1000,\
+                    float(start_points[i]) / 1000,\
+                    speedup_ratio[i - 1])
         segments.append(s)
     return segments
 
@@ -215,10 +218,22 @@ def pcm2float(sig, dtype='float64'):
     # Therefore, we use '-min' here to avoid clipping.
     return sig.astype(dtype) / dtype.type(-np.iinfo(sig.dtype).min)
 
-def gen_audio_segments(file_name, segments):
-    subprocess.call(['ls', '-l'])
-    for s in segments:
-        start, end, ratio = s.start, s.end, s.ratio
+def gen_audio_segments(input_file_name, segments):
+    base_name, extension = os.path.splitext(input_file_name)
+    audio_end = segments[-1].end
+    for i in xrange(len(segments)):
+        s = segments[i]
+        output_file_name = base_name + '_' + str(i) + extension
+        # preserve 1 second at the end of each segment,
+        # for MELT (the video editor) to grab frames.
+        end = s.end + 1
+        if end > audio_end:
+            end = audio_end
+        # Run 'sox' to generate audio clips.
+        command = ['sox', input_file_name, output_file_name,\
+                   'trim', '%.3f' % s.start, '=%.3f' % end,\
+                   'tempo', '-s', '%.3f' % s.ratio]
+        subprocess.call(command)
 
 def gen_render_file(segments):
     pass
@@ -232,6 +247,7 @@ class Syllable:
         self.times = times
 
 # A segment with start time, end time, and its speed-up ratio.
+# Time is in second. e.g. start = 1.234 means 1.234 second.
 class Segment:
     def __init__(self, start, end, ratio):
         self.start = start
@@ -243,7 +259,7 @@ class Segment:
                 self.start, self.end, self.ratio)
 
 if __name__ == '__main__':
-    file_name = 'samples/music.wav'
+    file_name = 'playground/music.wav'
     segments = calc_speedup_ratio(file_name, 2)
     gen_audio_segments(file_name, segments)
     gen_render_file(segments)

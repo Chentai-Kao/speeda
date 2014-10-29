@@ -63,6 +63,8 @@ Log
       - Turns out I missed two blocks of Harma code.
     - Now the detected syllables (Python v.s. Matlab) are identical.
     - TODO: Harma code needs refactoring.
+    - Fixed 2 off-by-1 error.
+  - Done with re-writing run.m. Identical to Matlab result.
 
 
 

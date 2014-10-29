@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import pylab
+import subprocess
 import warnings
 
 import numpy as np
@@ -8,18 +9,23 @@ import scipy
 import scipy.signal
 import scipy.io.wavfile
 
-def calc_speedup_ratio(audio_file, speed):
+def calc_speedup_ratio(file_name, speed):
     '''Output speed-up ratio of each segment in the audio.'''
-    fs, audio = load_audio(audio_file)
-    syllable_times = detect_syllables(audio, fs) # list of tuple (start, end)
-
-    # calcDensity() + calcDensityMedian()
-    density = calc_density(syllable_times, audio, fs) # list of density
-
-    # calcSegments() + mergeSegments()
-#    segments = calc_segments(density) # list of segment's start point
-
-#    speedup_ratio = calc_speedup_ratio(segments, density, speed) # list of ratio
+    audio, fs = load_audio(file_name)
+    # list of tuple (start, end)
+    syllable_times = detect_syllables(audio, fs)
+    # calcDensity() + calcDensityMedian() => list of density
+    density = calc_density(syllable_times, audio, fs)
+    # calcSegments() + mergeSegments() => list of segment's start point
+    start_points = calc_segments(density)
+    # list of ratio
+    speedup_ratio = calc_ratios(start_points, density, speed, audio, fs)
+    # Create all segments.
+    segments = []
+    for i in xrange(1, len(start_points)):
+        s = Segment(start_points[i - 1], start_points[i], speedup_ratio[i - 1])
+        segments.append(s)
+    return segments
 
 def detect_syllables(audio, fs):
     syllables = harma(audio, fs)
@@ -112,30 +118,89 @@ def harma(audio, fs):
 def calc_density(syllable_times, audio, fs):
     # Compute density by voting.
     voteWindow = 0.3 # in second
-    density = np.zeros(int(np.floor(float(audio.size) / fs * 1000))) # len in ms
+    density = np.zeros(int(float(audio.size) / fs * 1000), # in ms
+                       dtype=np.uint32)
     for start, end in syllable_times:
-        vote_start = int(np.floor((start - voteWindow) * 1000))
+        vote_start = int(np.floor((start - voteWindow) * 1000)) - 1
         vote_end = int(np.floor((end + voteWindow) * 1000))
         if vote_start < 0:
             vote_start = 0
-        if vote_end >= density.size:
-            vote_end = density.size - 1
-        for i in xrange(vote_start, vote_end + 1):
+        if vote_end > density.size:
+            vote_end = density.size
+        for i in xrange(vote_start, vote_end):
             density[i] += 1
     # Median filtering
     window_size = 151
-    scipy.signal.medfilt(density, window_size)
-    return density
+    return scipy.signal.medfilt(density, window_size)
 
-def load_audio(audio_file):
-    '''Loads audio from AUDIO_FILE and return it.'''
+def calc_segments(density):
+    # Calculate the splitting points of segments.
+    seg_points = np.array([0], dtype=np.uint32)
+    in_valley = False
+    valley_start = 0
+    for m in xrange(1, density.size):
+        if density[m - 1] < density[m]:
+            if in_valley: # valley ends
+                seg_points = np.append(seg_points, [valley_start, m])
+            in_valley = False
+        elif density[m - 1] > density[m]:
+            valley_start = m
+            in_valley = True
+    # Make sure 'seg_points' has the end point of 'density'.
+    if seg_points[-1] != density.size:
+        seg_points = np.append(seg_points, density.size - 1);
+    # Merge splitting points to create segment start points.
+    min_segment_length = 400 # in ms
+    start_points = np.array([0])
+    seg_start = seg_points[0]
+    for m in xrange(1, seg_points.size):
+        if seg_points[m] - seg_start > min_segment_length:
+            start_points = np.append(start_points, seg_points[m])
+            seg_start = seg_points[m]
+    return start_points
+
+def calc_ratios(start_points, density, speed, audio, fs):
+    pause_time = 150 # desired pause time (in ms)
+    avg_density = np.mean(density)
+    # Pause count and speak time.
+    pause_count = 0
+    speak_time = 0
+    for m in xrange(1, start_points.size):
+        seg_start, seg_end = start_points[m - 1], start_points[m]
+        if is_pause(density[seg_start:seg_end]):
+            pause_count += 1
+        else:
+            ratio = avg_density / np.mean(density[seg_start:seg_end])
+            speak_time += float(seg_end - 1 - seg_start) / ratio
+    # Calculate desired ratio.
+    audio_length = float(audio.size) / fs * 1000 # audio length in ms.
+    expected_time = audio_length / speed
+    desired_ratio = speak_time / (expected_time - pause_count * pause_time)
+    # speed up
+    speedup_ratio = np.zeros(0)
+    for m in xrange(1, start_points.size):
+        seg_start, seg_end = start_points[m - 1], start_points[m]
+        if is_pause(density[seg_start:seg_end]):
+            ratio = (seg_end - 1 - seg_start) / pause_time
+        else:
+            ratio = avg_density * desired_ratio /\
+                    np.mean(density[seg_start:seg_end])
+        speedup_ratio = np.append(speedup_ratio, ratio)
+    return speedup_ratio
+
+def is_pause(segment):
+    # How much of the segment is zero for it to be considered a pause.
+    pause_threshold = 0.5
+    return float(np.count_nonzero(segment)) / segment.size < pause_threshold
+
+def load_audio(file_name):
     # Suppress the warning from scipy loading wav file.
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        sample_rate, audio = scipy.io.wavfile.read(audio_file)
+        sample_rate, audio = scipy.io.wavfile.read(file_name)
     mono = audio[:, 0] # only the first channel is used
     normalized = pcm2float(mono, 'float32')
-    return sample_rate, normalized
+    return normalized, sample_rate
 
 def pcm2float(sig, dtype='float64'):
     """Excerpted from mgeier on Github."""
@@ -150,8 +215,10 @@ def pcm2float(sig, dtype='float64'):
     # Therefore, we use '-min' here to avoid clipping.
     return sig.astype(dtype) / dtype.type(-np.iinfo(sig.dtype).min)
 
-def gen_audio_segments(segments):
-    pass
+def gen_audio_segments(file_name, segments):
+    subprocess.call(['ls', '-l'])
+    for s in segments:
+        start, end, ratio = s.start, s.end, s.ratio
 
 def gen_render_file(segments):
     pass
@@ -164,8 +231,20 @@ class Syllable:
     def __init__(self, times):
         self.times = times
 
+# A segment with start time, end time, and its speed-up ratio.
+class Segment:
+    def __init__(self, start, end, ratio):
+        self.start = start
+        self.end = end
+        self.ratio = ratio
+
+    def __str__(self):
+        return '(start, end, ratio) = (%.3f, %.3f, %.3f)' % (\
+                self.start, self.end, self.ratio)
+
 if __name__ == '__main__':
-    segments = calc_speedup_ratio('samples/music.wav', 2)
-    gen_audio_segments(segments)
+    file_name = 'samples/music.wav'
+    segments = calc_speedup_ratio(file_name, 2)
+    gen_audio_segments(file_name, segments)
     gen_render_file(segments)
     render()

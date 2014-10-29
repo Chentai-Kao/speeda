@@ -261,7 +261,7 @@ function segments = mergeSegments(segPoints)
   segments = [1];
   segStart = segPoints(1);
   for m = 2:length(segPoints)
-    if segPoints(m) - segStart >= minSegmentLength
+    if segPoints(m) - segStart > minSegmentLength
       segments = [segments segPoints(m)];
       segStart = segPoints(m);
     end
@@ -275,6 +275,7 @@ function [starts, ends, ratios] = calcRatios(segments, density, speed,...
   ratios = [];
   pauseTime = 150; % desired pause time length (unit: ms)
   avgDensity = mean(density);
+
   % pause count and speak time
   pauseCount = 0;
   speakTime = 0;

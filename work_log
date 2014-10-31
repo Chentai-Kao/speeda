@@ -73,6 +73,11 @@ Log
   - Change ratio to 2 decimals precision, highest precision supported by melt.
   - TODO: align Segment() timestamp with video frames.
           Generate audio and video afterwards.
+10/30
+  - Figured out how to add audio track. Need additional <playlist> and <tractor>
+  - (DONE) TODO: Fix the bug on audio resource path.
+10/31
+  - Add <tractor>, fix some bugs. Now generate correct XML that renders!
 
 
 

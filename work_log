@@ -63,8 +63,16 @@ Log
       - Turns out I missed two blocks of Harma code.
     - Now the detected syllables (Python v.s. Matlab) are identical.
     - TODO: Harma code needs refactoring.
-    - Fixed 2 off-by-1 error.
+10/27
+  - Fixed 2 off-by-1 error in speeda.py.
+10/28
   - Done with re-writing run.m. Identical to Matlab result.
+10/29
+  - Done with speeda.py
+  - Done with generating audio clips by sox.
+  - Change ratio to 2 decimals precision, highest precision supported by melt.
+  - TODO: align Segment() timestamp with video frames.
+          Generate audio and video afterwards.
 
 
 

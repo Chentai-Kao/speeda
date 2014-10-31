@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+from lxml.builder import E
+import lxml.etree as ET
 import os
 import subprocess
 import warnings
@@ -10,9 +12,9 @@ import scipy
 import scipy.signal
 import scipy.io.wavfile
 
-def calc_speedup_ratio(file_name, speed):
+def calc_speedup_ratio(audio_file, speed):
     '''Output speed-up ratio of each segment in the audio.'''
-    audio, fs = load_audio(file_name)
+    audio, fs = load_audio(audio_file)
     # list of tuple (start, end)
     syllable_times = detect_syllables(audio, fs)
     # calcDensity() + calcDensityMedian() => list of density
@@ -26,7 +28,7 @@ def calc_speedup_ratio(file_name, speed):
     for i in xrange(1, len(start_points)):
         s = Segment(float(start_points[i - 1]) / 1000,\
                     float(start_points[i]) / 1000,\
-                    speedup_ratio[i - 1])
+                    np.around(speedup_ratio[i - 1], decimals=2))
         segments.append(s)
     return segments
 
@@ -196,11 +198,11 @@ def is_pause(segment):
     pause_threshold = 0.5
     return float(np.count_nonzero(segment)) / segment.size < pause_threshold
 
-def load_audio(file_name):
-    # Suppress the warning from scipy loading wav file.
+def load_audio(audio_file):
+    # Suppress the warning from scipy loading wav audio_file.
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        sample_rate, audio = scipy.io.wavfile.read(file_name)
+        sample_rate, audio = scipy.io.wavfile.read(audio_file)
     mono = audio[:, 0] # only the first channel is used
     normalized = pcm2float(mono, 'float32')
     return normalized, sample_rate
@@ -218,25 +220,79 @@ def pcm2float(sig, dtype='float64'):
     # Therefore, we use '-min' here to avoid clipping.
     return sig.astype(dtype) / dtype.type(-np.iinfo(sig.dtype).min)
 
-def gen_audio_segments(input_file_name, segments):
-    base_name, extension = os.path.splitext(input_file_name)
+def gen_audio_segments(input_file, segments):
+    base_name, extension = os.path.splitext(input_file)
     audio_end = segments[-1].end
     for i in xrange(len(segments)):
         s = segments[i]
-        output_file_name = base_name + '_' + str(i) + extension
+        output_file = base_name + '_' + str(i) + extension
         # preserve 1 second at the end of each segment,
         # for MELT (the video editor) to grab frames.
         end = s.end + 1
         if end > audio_end:
             end = audio_end
         # Run 'sox' to generate audio clips.
-        command = ['sox', input_file_name, output_file_name,\
+        command = ['sox', input_file, output_file,\
                    'trim', '%.3f' % s.start, '=%.3f' % end,\
-                   'tempo', '-s', '%.3f' % s.ratio]
+                   'tempo', '-s', '%.2f' % s.ratio]
         subprocess.call(command)
 
-def gen_render_file(segments):
-    pass
+def gen_render_script(video_file, sh_script_path, mlt_script_path, segments):
+    # TODO BASH script
+    # melt script (XML)
+    mlt_script = gen_melt_script(video_file, segments)
+    with open(mlt_script_path, 'w') as f:
+        f.write("<?xml version='1.0' encoding='utf-8'?>\n")
+        f.write(mlt_script)
+
+def gen_melt_script(video_file, segments):
+    # Some useful info.
+    frame_rate, frame_length = get_video_profiles(video_file)
+    video_time = segments[-1].end # video time in second.
+    root_dir = os.path.dirname(os.path.abspath(video_file))
+    video_base_name = os.path.basename(video_file)
+    # XML elements
+    mlt = E('mlt', {'title': 'Speeda', 'version': '0.9.0', 'root': root_dir,\
+                    'LC_NUMERIC': 'en_US.UTF-8'})
+    video_track = E('playlist', {'id': 'playlist1'})
+    producer_ids = set() # avoid creating <producer> with same speed-up ratio.
+    for s in segments:
+        # Producer.
+        producer_id = 'slowmotion:2:%.2f' % s.ratio
+        producer_frame_length = int(frame_length / s.ratio)
+        producer_resource = video_base_name + '?%.2f' % s.ratio
+        if producer_id not in producer_ids:
+            producer_ids.add(producer_id)
+            p = E('producer', {'in': '0',
+                               'out': str(producer_frame_length - 1),
+                               'id': producer_id})
+            p.append(E('property', {'name': 'mlt_type'}, 'producer'))
+            p.append(E('property', {'name': 'length'},
+                       str(producer_frame_length)))
+            p.append(E('property', {'name': 'resource'}, producer_resource))
+            p.append(E('property', {'name': 'mlt_service'}, 'framebuffer'))
+            mlt.append(p)
+        # Clip.
+        start_frame = int(s.start / video_time * producer_frame_length)
+        end_frame = int(s.end / video_time * producer_frame_length) - 1
+        video_track.append(E('entry', {'in': str(start_frame),
+                                       'out': str(end_frame),
+                                       'producer': producer_id}))
+    mlt.append(video_track)
+    return ET.tostring(mlt, pretty_print=True)
+
+def get_video_profiles(video_file):
+    p = subprocess.Popen(['melt', video_file, '-consumer', 'xml'],
+                         stdout=subprocess.PIPE)
+    stdout, stderr = p.communicate()
+    # Parse XML.
+    root = ET.fromstring(stdout)
+    # Get useful info.
+    frame_rate = int(root.find('profile').get('frame_rate_num'))
+    for property_tag in root.find('producer'):
+        if property_tag.get('name') == 'length':
+            frame_length = int(property_tag.text)
+    return frame_rate, frame_length
 
 def render():
     pass
@@ -255,12 +311,16 @@ class Segment:
         self.ratio = ratio
 
     def __str__(self):
-        return '(start, end, ratio) = (%.3f, %.3f, %.3f)' % (\
+        return '(start, end, ratio) = (%.2f, %.2f, %.2f)' % (\
                 self.start, self.end, self.ratio)
 
 if __name__ == '__main__':
-    file_name = 'playground/music.wav'
-    segments = calc_speedup_ratio(file_name, 2)
-    gen_audio_segments(file_name, segments)
-    gen_render_file(segments)
+    audio_file = 'playground/short.wav' # TODO extract from video
+    video_file = 'playground/short.mp4'
+    sh_script_path = 'playground/test.sh'
+    mlt_script_path = sh_script_path + '.mlt'
+
+    segments = calc_speedup_ratio(audio_file, 2)
+    #gen_audio_segments(audio_file, segments)
+    gen_render_script(video_file, sh_script_path, mlt_script_path, segments)
     render()

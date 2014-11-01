@@ -43,11 +43,11 @@ def detect_syllables(audio, fs):
 
 def harma(audio, fs):
     # Parameters for harma.
-    nfft = 128
+    nfft = 256
     window = np.kaiser(nfft, 0.5)
     minDB = 20
     # Calculate spectrogram.
-    mag, F, T, _ = pylab.specgram(audio, Fs=fs, window=window, noverlap=64,
+    mag, F, T, _ = pylab.specgram(audio, Fs=fs, window=window, noverlap=128,
                                   NFFT=nfft, mode='magnitude')
     # Initialize segmentation parameters.
     syllables = []
@@ -234,20 +234,40 @@ def gen_audio_segments(input_file, segments):
         if end > audio_end:
             end = audio_end
         # Run 'sox' to generate audio clips.
-        command = ['sox', input_file, output_file,\
-                   'trim', '%.3f' % s.start, '=%.3f' % end,\
-                   'tempo', '-s', '%.2f' % s.ratio]
-        subprocess.call(command)
+        p = subprocess.call(['sox', input_file, output_file,\
+                             'trim', '%.3f' % s.start, '=%.3f' % end,\
+                             'tempo', '-s', '%.2f' % s.ratio])
     return audio_clips
 
-def gen_render_script(video_file, sh_script_path, mlt_script_path,\
+def render(video_file, sh_script_path, mlt_script_path, target_path,\
                       segments, audio_clips):
-    # TODO BASH script
-    # melt script (XML)
+    # Generate BASH script.
+    bash_script = gen_bash_script(mlt_script_path, target_path)
+    with open(sh_script_path, 'w') as f:
+        f.write(bash_script)
+    # Generate melt script (XML).
     mlt_script = gen_melt_script(video_file, segments, audio_clips)
     with open(mlt_script_path, 'w') as f:
         f.write("<?xml version='1.0' encoding='utf-8'?>\n")
         f.write(mlt_script)
+    # Render.
+    #subprocess.call(['bash', sh_script_path])
+
+def gen_bash_script(mlt_script_path, target_path):
+    mlt_script_abs_path = os.path.abspath(mlt_script_path)
+    target_abs_path = os.path.abspath(target_path)
+    s = ''
+    s += '#! /bin/sh\n'
+    s += 'SOURCE="' + mlt_script_abs_path + '"\n'
+    s += 'TARGET="' + target_abs_path + '"\n'
+    s += 'RENDERER="/usr/bin/kdenlive_render"\n'
+    s += 'MELT="/usr/bin/melt"\n'
+    s += 'PARAMETERS="-pid:24332 $MELT hdv_1080_50i avformat - '\
+         '$SOURCE $TARGET f=mp4 acodec=libmp3lame ab=128k ar=44100 '\
+         'vcodec=mpeg4 minrate=0 vb=12000k aspect=@16/9 mbd=2 trellis=1 '\
+         'mv4=1 pass=1 threads=1 real_time=-1"\n'
+    s += '$RENDERER $PARAMETERS\n'
+    return s
 
 def gen_melt_script(video_file, segments, audio_clips):
     # Some useful info.
@@ -337,9 +357,6 @@ def get_video_profiles(video_file):
             frame_length = int(property_tag.text)
     return frame_rate, frame_length
 
-def render():
-    pass
-
 # A syllable detected by Harma. Only keep relevant info here.
 class Syllable:
     def __init__(self, times):
@@ -358,13 +375,13 @@ class Segment:
                 self.start, self.end, self.ratio)
 
 if __name__ == '__main__':
-    audio_file = 'playground/short.wav' # TODO extract from video
-    video_file = 'playground/short.mp4'
-    sh_script_path = 'playground/test.sh'
+    audio_file = 'playground/haptics/haptics.wav' # TODO extract from video
+    video_file = 'playground/haptics/haptics.mp4'
+    sh_script_path = 'playground/haptics/test.sh'
     mlt_script_path = sh_script_path + '.mlt'
+    target_path = 'playground/haptics/test.mp4'
 
     segments = calc_speedup_ratio(audio_file, 2)
     audio_clips = gen_audio_segments(audio_file, segments)
-    gen_render_script(video_file, sh_script_path, mlt_script_path,\
-                      segments, audio_clips)
-    render()
+    render(video_file, sh_script_path, mlt_script_path, target_path,\
+           segments, audio_clips)

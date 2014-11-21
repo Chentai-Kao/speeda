@@ -24,19 +24,22 @@ function run(inFileName, outFileName, speed)
   %[syllableStarts, syllableEnds] = alignToFrame(syllableStarts, syllableEnds);
 
   % Calculate instant syllable speed.
-  density = calcDensity(original, Fs, syllableStarts, syllableEnds);
+  voteDensity = calcVoteDensity(original, Fs, syllableStarts, syllableEnds);
 
   % Filter the syllable density by median.
-  densityMedian = calcDensityMedian(density);
+  voteDensityMedian = calcVoteDensityMedian(voteDensity);
   
   % Find valleys for segmentation.
-  segPoints = calcSegments(densityMedian);
+  segPoints = calcSegments(voteDensityMedian);
 
   % Merge segments.
   segments = mergeSegments(segPoints);
 
+  % Calculate syllable density corresponding to each segment.
+  syllableDensity = calcSyllableDensity(segments, syllableStarts);
+
   % calculate speed ratio
-  [starts, ends, ratios] = calcRatios(segments, densityMedian, speed,...
+  [starts, ends, ratios] = calcRatios(segments, syllableDensity, speed,...
                                       audioLength);
 
   % output ratio to file
@@ -56,14 +59,14 @@ function run(inFileName, outFileName, speed)
     ylabel('Amptitude');
     title('Audio Signal');
 
-    %plot(density, 'g');
+    %plot(voteDensity, 'g');
     subplot(3, 1, 2); hold on;
-    plot(densityMedian, 'LineWidth', 3);
+    plot(voteDensityMedian, 'LineWidth', 3);
     set(gca, 'XTick', []);
     %xlim([1, 7000]);
     %ylim([0, 3]);
     ylabel('Number of votes');
-    title('Syllable density');
+    title('Syllable voteDensity');
     %plot(segPoints, 2 * ones(1, length(segPoints)), 'bo');
     plot(syllableStarts * 1000, 4 * ones(1, length(syllableStarts)), 'go');
     plot(syllableEnds * 1000, 3 * ones(1, length(syllableEnds)), 'rx');
@@ -80,90 +83,6 @@ function run(inFileName, outFileName, speed)
     ylabel('Ratio');
     title('Speed-up ratio');
   end
-
-%  % Calculate start, end, and syllable density
-%  segThresTime = 0.2; % in seconds
-%  densities = [];
-%  starts = [];
-%  ends = [];
-%  pauses = [];
-%  segmentStart = syllableStarts(1);
-%  syllableCount = 1;
-%  for m = 2:length(syllableStarts)
-%    if syllableStarts(m) - syllableEnds(m - 1) > segThresTime
-%      density = syllableCount / (syllableEnds(m - 1) - segmentStart);
-%      densities = [densities density];
-%      starts = [starts uint32(segmentStart * Fs)];
-%      ends = [ends uint32(syllableEnds(m - 1) * Fs)];
-%      pauses = [pauses uint32((syllableStarts(m) - syllableEnds(m - 1)) * Fs)];
-%
-%      segmentStart = syllableStarts(m);
-%      syllableCount = 1;
-%    else
-%      syllableCount = syllableCount + 1;
-%    end
-%  end
-%  density = syllableCount / (syllableEnds(end) - segmentStart);
-%  densities = [densities density];
-%  starts = [starts uint32(segmentStart * Fs)];
-%  ends = [ends uint32(syllableEnds(end) * Fs)];
-%
-%  % Calculate desired ratio of speeding up each segment and pause
-%  speedRatio = 1.2; % desired speed ratio
-%  speed = mean(densities) * speedRatio; % desired peak per second
-%  pauseTime = 0.15; % desired length of pause (in second)
-%  pauseLen = time2samples(pauseTime, Fs); % desired length of pause (#samples)
-%  ratios = zeros(1, length(densities) + length(pauses));
-%  ratios(1:2:end) = speed ./ densities;
-%  ratios(2:2:end) = pauses ./ pauseLen;
-%
-%  % Round speedup ratio to multiple of 1/60
-%  fps = round(1 ./ ratios .* 60);
-%  ratios = 60 ./ fps;
-%
-%  % Merge segments and pauses to output
-%  out = zeros(1, length(original));
-%  writePos = 1; % position of next writing to output
-%  for m = 1:length(starts)
-%    % speed up segments
-%    segment = original(starts(m):ends(m));
-%    fastSegment = psola(segment', Fs, ratios(2 * m - 1));
-%    wavwrite(fastSegment, Fs, ['pf1/' int2str(2 * m - 2) '-out.wav']);
-%    [writePos, out] = appendOutput(fastSegment, out, writePos);
-%    % speed up pauses
-%    if m < length(starts)
-%      pause = original(ends(m):starts(m + 1));
-%      fastPause = psola(pause', Fs, ratios(2 * m));
-%      wavwrite(fastPause, Fs, ['pf1/' int2str(2 * m - 1) '-out.wav']);
-%      [writePos, out] = appendOutput(fastPause, out, writePos);
-%    end
-%  end
-%  out = out(1:writePos - 1); % trim output
-
-%  wavwrite(out, Fs, [fileName '-out.wav']);
-%  h = figure('visible', visibility); hold on;
-%  plot(out);
-%  saveas(h, [fileName '-out.jpg']);
-
-%  % Output segments and speed-ratio for video acceleration.
-%  startsMs = 1000 * starts / Fs; % start time in millisecond
-%  endsMs = 1000 * ends / Fs; % start time in millisecond
-%
-%  of = fopen(['pf1/' fileName '-segments'], 'w');
-%  for m = 1:length(startsMs)
-%    fprintf(of, '%d %d %d\n', startsMs(m), endsMs(m), fps(2 * m - 1));
-%    if m < length(startsMs)
-%      fprintf(of, '%d %d %d\n', endsMs(m), startsMs(m + 1), fps(2 * m));
-%    end
-%  end
-%  fclose(of);
-
-  % PSOLA usage
-  %y_slow = psola(original', Fs, 0.8);
-  %y_fast = psola(original', Fs, 2);
-  %wavwrite(y_slow, Fs, 'slow.wav');
-  %wavwrite(y_fast, Fs, 'fast_2.wav');
-
 end
 
 % Return number of samples (rounded down to integer) that holds
@@ -210,9 +129,9 @@ end
 % Calculate instant syllable speed.
 % Each syllable casts 1 vote to every nearby time frame (unit: 1ms)
 % within voteWindow of start and end time of the syllable.
-function density = calcDensity(audio, Fs, syllableStarts, syllableEnds)
+function voteDensity = calcVoteDensity(audio, Fs, syllableStarts, syllableEnds)
   voteWindow = 0.3; % in second
-  density = zeros(1, floor(length(audio) / Fs * 1000)); % length in ms
+  voteDensity = zeros(1, floor(length(audio) / Fs * 1000)); % length in ms
   for m = 1:length(syllableStarts)
     % calculate the range to cast vote. Clamp to (1, end) respetively.
     voteStart = floor((syllableStarts(m) - voteWindow) * 1000);
@@ -220,39 +139,39 @@ function density = calcDensity(audio, Fs, syllableStarts, syllableEnds)
     if voteStart < 1
       voteStart = 1;
     end
-    if voteEnd > length(density)
-      voteEnd = length(density);
+    if voteEnd > length(voteDensity)
+      voteEnd = length(voteDensity);
     end
     % cast vote
     for n = voteStart:voteEnd
-      density(n) = density(n) + 1;
+      voteDensity(n) = voteDensity(n) + 1;
     end
   end
 end
 
-function densityMedian = calcDensityMedian(density)
+function voteDensityMedian = calcVoteDensityMedian(voteDensity)
   windowSize = 151;
-  densityMedian = medfilt1(density, windowSize);
+  voteDensityMedian = medfilt1(voteDensity, windowSize);
 end
 
-function segPoints = calcSegments(density)
+function segPoints = calcSegments(voteDensity)
   segPoints = [1];
-  inValley = false;
+  inValley = true;
   valleyStart = 1;
-  for m = 2:length(density)
-    if density(m - 1) < density(m)
+  for m = 2:length(voteDensity)
+    if voteDensity(m - 1) < voteDensity(m)
       if inValley % valley ends
         segPoints = [segPoints, valleyStart, m];
       end
       inValley = false;
-    elseif density(m - 1) > density (m)
+    elseif voteDensity(m - 1) > voteDensity (m)
       valleyStart = m;
       inValley = true;
     end
   end
-  % Make sure 'segPoints' has the end point of 'density'
-  if segPoints(end) ~= length(density)
-    segPoints = [segPoints length(density)];
+  % Make sure 'segPoints' has the end point of 'voteDensity'
+  if segPoints(end) ~= length(voteDensity)
+    segPoints = [segPoints length(voteDensity)];
   end
 end
 
@@ -268,14 +187,14 @@ function segments = mergeSegments(segPoints)
   end
 end
 
-function [starts, ends, ratios] = calcRatios(segments, density, speed,...
-                                             audioLength)
+function [starts, ends, ratios] = calcRatios(segments, syllableDensity,...
+                                             speed, audioLength)
   starts = [];
   ends = [];
   ratios = [];
   pauseTime = 150; % desired pause time length (unit: ms)
-  avgDensity = mean(density);
-  disp(sprintf('average density: %.3f', avgDensity))
+  avgDensity = mean(syllableDensity);
+  disp(sprintf('average syllableDensity: %.3f', avgDensity))
 
   % pause count and speak time
   pauseCount = 0;
@@ -283,10 +202,10 @@ function [starts, ends, ratios] = calcRatios(segments, density, speed,...
   for m = 2:length(segments)
     segStart = segments(m - 1);
     segEnd = segments(m) - 1; % TODO should this overlap?
-    if isPause(density(segStart:segEnd))
+    if syllableDensity(m - 1) == 0 && segEnd - segStart > pauseTime
       pauseCount = pauseCount + 1;
     else
-      ratio = avgDensity / mean(density(segStart:segEnd));
+      ratio = avgDensity / syllableDensity(m - 1);
       speakTime = speakTime + (segEnd - segStart) / ratio;
     end
   end
@@ -300,20 +219,29 @@ function [starts, ends, ratios] = calcRatios(segments, density, speed,...
     starts = [starts segStart];
     ends = [ends segEnd];
     % ratio
-    if isPause(density(segStart:segEnd))
+    if syllableDensity(m - 1) == 0 && segEnd - segStart > pauseTime
       ratio = (segEnd - segStart) / pauseTime;
     else
-      ratio = avgDensity * desiredRatio / mean(density(segStart:segEnd));
+      ratio = avgDensity * desiredRatio / syllableDensity(m - 1);
     end
     ratios = [ratios ratio];
   end
 end
 
-function flag = isPause(segment)
-  pauseThres = 0.5; % half of segment is zero
-  if nnz(segment) / length(segment) < pauseThres
-    flag = true;
-  else
-    flag = false;
+% 'segments' starts from the first sample, ends at the last sample.
+% e.g. for a music with 1000 audio samples, segments = [1, 23, ..., 1000]
+% Therefore, there are k segments if length(segments) == k+1
+% Note: unit of syllableStarts is second, segments is milli-second
+function syllableDensity = calcSyllableDensity(segments, syllableStarts)
+  syllableDensity = zeros(1, length(segments) - 1);
+  index = 1; % syllable index
+  for m = 2:length(segments)
+    count = 0;
+    while index <= length(syllableStarts) &&...
+        (1000 * syllableStarts(index) < segments(m))
+      index = index + 1;
+      count = count + 1;
+    end
+    syllableDensity(m - 1) = count / (segments(m) - segments(m - 1));
   end
 end

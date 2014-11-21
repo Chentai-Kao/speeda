@@ -375,13 +375,13 @@ class Segment:
                 self.start, self.end, self.ratio)
 
 if __name__ == '__main__':
-    audio_file = 'playground/haptics/haptics.wav' # TODO extract from video
-    video_file = 'playground/haptics/haptics.mp4'
-    sh_script_path = 'playground/haptics/test.sh'
+    audio_file = 'playground/haptics_short_no_glitch/haptics_short_no_glitch.wav' # TODO extract from video
+    video_file = 'playground/haptics_short_no_glitch/haptics_short_no_glitch.mp4'
+    sh_script_path = 'playground/haptics_short_no_glitch/test.sh'
     mlt_script_path = sh_script_path + '.mlt'
-    target_path = 'playground/haptics/test.mp4'
+    target_path = 'playground/haptics_short_no_glitch/test.mp4'
 
-    segments = calc_speedup_ratio(audio_file, 2)
+    segments = calc_speedup_ratio(audio_file, 1)
     audio_clips = gen_audio_segments(audio_file, segments)
     render(video_file, sh_script_path, mlt_script_path, target_path,\
            segments, audio_clips)

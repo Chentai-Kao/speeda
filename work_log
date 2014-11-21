@@ -78,7 +78,30 @@ Log
   - (DONE) TODO: Fix the bug on audio resource path.
 10/31
   - Add <tractor>, fix some bugs. Now generate correct XML that renders!
-
+  - Linux freezes when rendering. Don't know the cause.
+    Call bash outside Python seems better (temporarily).
+  - Test on 'math.mp4'. The effect is not good, finding out why...
+11/1
+  - On quieter part, syllable detection is not effective.
+    (TODO) Possible solution: adjust 'minDB' according to audio volume.
+  - Tweaking Harma parameters. After several trials, seems the original setting
+    (nfft=256, overlap=128, minDB=20) works the best.
+  - Try several videos:
+    - economics:
+      - speaker speaks at almost the same rate, Speeda not too helpful
+    - math:
+      - "interview" too quiet, few syllables detected, so it becomes too fast.
+    - haptics:
+      - good, with variation of speaking rate.
+      - There's a frame glitch (~0:07), caused by kdenlive when ".mov -> .mp4"
+  - The reason of freezing when rendering is OUT-OF-MEMORY!!!
+    If the film is lengthy, then it just takes up all memory and freeze.
+    Probably too many kinds of <producer> (with various speed ratio).
+    (TODO) Solution:
+      - Maybe AWS has larger memory?
+      - Reduce the number of speedup rate to some fixed level,
+        like 0.25, 0.5, 0.75, etc. Not allowing free ratio like 2.62.
+      - Create shorter clips for <producer> so it's not full length.
 
 
 

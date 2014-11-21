@@ -5,7 +5,7 @@ function run(inFileName, outFileName, speed)
 
   close all;
 
-  showPlot = false;
+  showPlot = true;
   visibility = 'off';
   if showPlot
     visibility = 'on';
@@ -182,7 +182,7 @@ end
 % AUDIO is a row vector.
 function [syllableStarts, syllableEnds] = detectSyllables(audio, Fs)
   [syllables, Fs, S, F, T, P] =...
-      harmaSyllableSeg(audio', Fs, kaiser(128), 64, 128, 20);
+      harmaSyllableSeg(audio', Fs, kaiser(256), 128, 256, 20);
   syllableStarts = zeros(1, length(syllables));
   syllableEnds = zeros(1, length(syllables));
   for m = 1:length(syllables)

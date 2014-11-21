@@ -57,7 +57,7 @@ function run(inFileName, outFileName, speed)
     title('Audio Signal');
 
     %plot(density, 'g');
-    subplot(3, 1, 2);
+    subplot(3, 1, 2); hold on;
     plot(densityMedian, 'LineWidth', 3);
     set(gca, 'XTick', []);
     %xlim([1, 7000]);
@@ -65,8 +65,8 @@ function run(inFileName, outFileName, speed)
     ylabel('Number of votes');
     title('Syllable density');
     %plot(segPoints, 2 * ones(1, length(segPoints)), 'bo');
-    %plot(syllableStarts * 1000, 4 * ones(1, length(syllableStarts)), 'go');
-    %plot(syllableEnds * 1000, 3 * ones(1, length(syllableEnds)), 'rx');
+    plot(syllableStarts * 1000, 4 * ones(1, length(syllableStarts)), 'go');
+    plot(syllableEnds * 1000, 3 * ones(1, length(syllableEnds)), 'rx');
     tmp_x = [];
     tmp_y = [];
     for m = 1:length(starts)
@@ -275,6 +275,7 @@ function [starts, ends, ratios] = calcRatios(segments, density, speed,...
   ratios = [];
   pauseTime = 150; % desired pause time length (unit: ms)
   avgDensity = mean(density);
+  disp(sprintf('average density: %.3f', avgDensity))
 
   % pause count and speak time
   pauseCount = 0;

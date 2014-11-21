@@ -1,0 +1,20 @@
+install git
+----------------------------------------------
+sudo apt-get install git
+
+generate ssh-key (to clone Git)
+----------------------------------------------
+cd ~/.ssh && ssh-keygen
+cat id_rsa.pub | xclip
+git config --global user.name "ru6xul6"
+git config --global user.email "ru6xul6@gmail.com"
+
+setup environment
+----------------------------------------------
+(for color terminal prompt, uncomment "force_color_prompt" in ~/.bashrc)
+(copy over my .vimrc)
+
+clone speeda
+----------------------------------------------
+git clone git@github.com:Cobra-Kao/speeda.git
+

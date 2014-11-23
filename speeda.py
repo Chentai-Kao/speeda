@@ -18,11 +18,14 @@ def calc_speedup_ratio(audio_file, speed):
     # list of tuple (start, end)
     syllable_times = detect_syllables(audio, fs)
     # calcDensity() + calcDensityMedian() => list of density
-    density = calc_density(syllable_times, audio, fs)
+    vote_density = calc_vote_density(syllable_times, audio, fs)
     # calcSegments() + mergeSegments() => list of segment's start point
-    start_points = calc_segments(density)
+    start_points = calc_segments(vote_density)
+    # calculate syllable density of each segment
+    syllable_density = calc_syllable_density(start_points, syllable_times)
     # list of ratio
-    speedup_ratio = calc_ratios(start_points, density, speed, audio, fs)
+    speedup_ratio = calc_ratios(start_points, syllable_density, speed, audio,
+                                fs)
     # Create all segments.
     segments = []
     for i in xrange(1, len(start_points)):
@@ -120,40 +123,40 @@ def harma(audio, fs):
         mag[:, segments] = 0
     return syllables
 
-def calc_density(syllable_times, audio, fs):
+def calc_vote_density(syllable_times, audio, fs):
     # Compute density by voting.
     voteWindow = 0.3 # in second
-    density = np.zeros(int(float(audio.size) / fs * 1000), # in ms
-                       dtype=np.uint32)
+    vote_density = np.zeros(int(float(audio.size) / fs * 1000), # in ms
+                            dtype=np.uint32)
     for start, end in syllable_times:
         vote_start = int(np.floor((start - voteWindow) * 1000)) - 1
         vote_end = int(np.floor((end + voteWindow) * 1000))
         if vote_start < 0:
             vote_start = 0
-        if vote_end > density.size:
-            vote_end = density.size
+        if vote_end > vote_density.size:
+            vote_end = vote_density.size
         for i in xrange(vote_start, vote_end):
-            density[i] += 1
+            vote_density[i] += 1
     # Median filtering
     window_size = 151
-    return scipy.signal.medfilt(density, window_size)
+    return scipy.signal.medfilt(vote_density, window_size)
 
-def calc_segments(density):
+def calc_segments(vote_density):
     # Calculate the splitting points of segments.
     seg_points = np.array([0], dtype=np.uint32)
-    in_valley = False
+    in_valley = True
     valley_start = 0
-    for m in xrange(1, density.size):
-        if density[m - 1] < density[m]:
+    for m in xrange(1, vote_density.size):
+        if vote_density[m - 1] < vote_density[m]:
             if in_valley: # valley ends
                 seg_points = np.append(seg_points, [valley_start, m])
             in_valley = False
-        elif density[m - 1] > density[m]:
+        elif vote_density[m - 1] > vote_density[m]:
             valley_start = m
             in_valley = True
-    # Make sure 'seg_points' has the end point of 'density'.
-    if seg_points[-1] != density.size:
-        seg_points = np.append(seg_points, density.size - 1);
+    # Make sure 'seg_points' has the end point of 'vote_density'.
+    if seg_points[-1] != vote_density.size:
+        seg_points = np.append(seg_points, vote_density.size - 1);
     # Merge splitting points to create segment start points.
     min_segment_length = 400 # in ms
     start_points = np.array([0])
@@ -164,18 +167,18 @@ def calc_segments(density):
             seg_start = seg_points[m]
     return start_points
 
-def calc_ratios(start_points, density, speed, audio, fs):
+def calc_ratios(start_points, syllable_density, speed, audio, fs):
     pause_time = 150 # desired pause time (in ms)
-    avg_density = np.mean(density)
+    avg_density = np.mean(syllable_density)
     # Pause count and speak time.
     pause_count = 0
     speak_time = 0
     for m in xrange(1, start_points.size):
         seg_start, seg_end = start_points[m - 1], start_points[m]
-        if is_pause(density[seg_start:seg_end]):
+        if syllable_density[m - 1] == 0 and seg_end - seg_start > pause_time:
             pause_count += 1
         else:
-            ratio = avg_density / np.mean(density[seg_start:seg_end])
+            ratio = avg_density / syllable_density[m - 1]
             speak_time += float(seg_end - 1 - seg_start) / ratio
     # Calculate desired ratio.
     audio_length = float(audio.size) / fs * 1000 # audio length in ms.
@@ -185,18 +188,25 @@ def calc_ratios(start_points, density, speed, audio, fs):
     speedup_ratio = np.zeros(0)
     for m in xrange(1, start_points.size):
         seg_start, seg_end = start_points[m - 1], start_points[m]
-        if is_pause(density[seg_start:seg_end]):
+        if syllable_density[m - 1] == 0 and seg_end - seg_start > pause_time:
             ratio = (seg_end - 1 - seg_start) / pause_time
         else:
-            ratio = avg_density * desired_ratio /\
-                    np.mean(density[seg_start:seg_end])
+            ratio = avg_density * desired_ratio / syllable_density[m - 1]
         speedup_ratio = np.append(speedup_ratio, ratio)
     return speedup_ratio
 
-def is_pause(segment):
-    # How much of the segment is zero for it to be considered a pause.
-    pause_threshold = 0.5
-    return float(np.count_nonzero(segment)) / segment.size < pause_threshold
+def calc_syllable_density(start_points, syllable_times):
+    syllable_density = np.zeros(len(start_points) - 1)
+    index = 0
+    for i in xrange(1, len(start_points)):
+        count = 0
+        while index < len(syllable_times) and\
+                1000 * syllable_times[index][0] < start_points[i]:
+            index += 1
+            count += 1
+        syllable_density[i - 1] = float(count) /\
+                                  (start_points[i] - start_points[i - 1])
+    return syllable_density
 
 def load_audio(audio_file):
     # Suppress the warning from scipy loading wav audio_file.
@@ -375,13 +385,13 @@ class Segment:
                 self.start, self.end, self.ratio)
 
 if __name__ == '__main__':
-    audio_file = 'playground/haptics_short_no_glitch/haptics_short_no_glitch.wav' # TODO extract from video
-    video_file = 'playground/haptics_short_no_glitch/haptics_short_no_glitch.mp4'
-    sh_script_path = 'playground/haptics_short_no_glitch/test.sh'
+    audio_file = 'playground/ai_short/ai_short.wav' # TODO extract from video
+    video_file = 'playground/ai_short/ai_short.mp4'
+    sh_script_path = 'playground/ai_short/test.sh'
     mlt_script_path = sh_script_path + '.mlt'
-    target_path = 'playground/haptics_short_no_glitch/test.mp4'
+    target_path = 'playground/ai_short/test.mp4'
 
-    segments = calc_speedup_ratio(audio_file, 1)
+    segments = calc_speedup_ratio(audio_file, 2)
     audio_clips = gen_audio_segments(audio_file, segments)
     render(video_file, sh_script_path, mlt_script_path, target_path,\
            segments, audio_clips)

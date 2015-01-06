@@ -102,6 +102,17 @@ Log
       - Reduce the number of speedup rate to some fixed level,
         like 0.25, 0.5, 0.75, etc. Not allowing free ratio like 2.62.
       - Create shorter clips for <producer> so it's not full length.
+11/29
+  - Tried deploying to EC2. Encountered some problems installing kdenlive.
+    - Upgrade to Ubuntu 14.04.
+    - Run kdenlive build script.
+    - Upgrade ffmpeg.
+    - Still "render aborted..." when rendering, finding out why.
+    - Since EC2 only has 4 GB, "top" shows that all the memory is used.
+      This is WHY IT'S ABORTED!!! (I guess)
+      Solution:
+      - request 8GB memory to test this hypothesis
+      - use shorter clip of producer (the previous TODO)
 
 
 

@@ -33,7 +33,16 @@ def calc_speedup_ratio(audio_file, speed):
                     float(start_points[i]) / 1000,\
                     np.around(speedup_ratio[i - 1], decimals=2))
         segments.append(s)
+    # (optional, used to lower memory requirement) quantize speedup ratio
+    for s in segments:
+        s.ratio = quantize_speedup_ratio(s.ratio)
     return segments
+
+def quantize_speedup_ratio(ratio):
+    '''Return quantized speedup ratio as multiple of 0.25. e.g. 1.25, 3.00.'''
+    if ratio < 0.25:
+        return 0.25
+    return round(ratio * 4) / 4
 
 def detect_syllables(audio, fs):
     syllables = harma(audio, fs)
@@ -391,7 +400,7 @@ if __name__ == '__main__':
     mlt_script_path = sh_script_path + '.mlt'
     target_path = 'playground/ai_short/test.mp4'
 
-    segments = calc_speedup_ratio(audio_file, 2)
+    segments = calc_speedup_ratio(audio_file, 1)
     audio_clips = gen_audio_segments(audio_file, segments)
     render(video_file, sh_script_path, mlt_script_path, target_path,\
            segments, audio_clips)

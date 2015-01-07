@@ -114,6 +114,18 @@ Log
       - request 8GB memory to test this hypothesis
       - use shorter clip of producer (the previous TODO)
 
+1/6
+  - Try to answer the question "is it possible to load shorter clip of producer"
+    - Answer: no. (see exp/scripts/ai_short_2x.sh.mlt).
+    - I cannot figure out how the resulted video is produced.
+  - Conclusion: maybe it's time to quantize speedup ratio?
+  - Done with quantizing speedup ratio to be multiple of 0.25.
+    - the output seems alright, no perceivable difference.
+    - some results on ai_short.mp4 (2 min):
+      - in .mlt, the number of <producer> reduces from 199 to 136. Good.
+      - when rendering on my laptop, memory usage reduces from 100% (freeze!)
+        to 18% (finish rendering).
+      - on EC2, the rendering still takes 100% memory (fail rendering).
 
 
 
@@ -121,27 +133,6 @@ Log
 
 
 
-Schedule
-========================================
-(1 week)
-  - Find a library for syllable-detection from audio. Would be better if Python code exists.
-
-(3 week)
-  - Detect speedup ratio of each video segment.
-  - Use linux tool to extract .wav from video file.
-  - Use .wav file for now. The actual audio format depends on what is available by processing the video file.
-  - Incorporate the syllable-detection library mentioned above.
-  - Rewrite existing framework (in Matlab) to Python.
-
-(2 week)
-  - Research on MLT framework, a command-line video editing tool.
-  - Few document, probably needs lots of trial-and-error.
-
-(1 week)
-  - Combine all of the above
-  - Extract audio from video
-  - Detect speedup ratio from audio
-  - Feed the speedup ratio in MLT framework, generate the output video.
 
 
 

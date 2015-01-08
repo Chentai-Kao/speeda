@@ -4,8 +4,10 @@ from lxml.builder import E
 import lxml.etree as ET
 import os
 import subprocess
+import sys
 import warnings
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pylab
 import scipy
@@ -86,9 +88,11 @@ def harma(audio, fs):
     nfft = 256
     window = np.kaiser(nfft, 0.5)
     minDB = 20
+    noverlap = 128
     # Calculate spectrogram.
-    mag, F, T, _ = pylab.specgram(audio, Fs=fs, window=window, noverlap=128,
-                                  NFFT=nfft, mode='magnitude')
+    mag, F, T, _ = pylab.specgram(audio, Fs=fs, window=window,
+                                  noverlap=noverlap, NFFT=nfft,
+                                  mode='magnitude')
     # Initialize segmentation parameters.
     syllables = []
     cutoff = None
@@ -520,6 +524,22 @@ def get_video_profiles(video_file):
             frame_length = int(property_tag.text)
     return frame_rate, frame_length
 
+def exp_harma():
+    """Small experiment on Harma parameters."""
+    audio_file = 'playground/ai_short/20_sec_ai_short.wav'
+    audio, fs = load_audio(audio_file)
+    syllable_times = detect_syllables(audio, fs)
+    start_time = [start for (start, end) in syllable_times]
+    end_time = [end for (start, end) in syllable_times]
+
+    plt.close('all')
+    plt.figure()
+    plt.plot(start_time, [1] * len(start_time), 'ro', markersize=1)
+    plt.plot(end_time, [0.9] * len(end_time), 'ro', markersize=1)
+    plt.axis([0, 20, 0, 2])
+    plt.title('Detected syllables (start: level 1, end: level 0.9)')
+    plt.show()
+
 # A syllable detected by Harma. Only keep relevant info here.
 class Syllable:
     def __init__(self, times):
@@ -539,6 +559,9 @@ class Segment:
 
 if __name__ == '__main__':
     """Main function of Speeda."""
+    #exp_harma()
+    #sys.exit(0)
+
     audio_file = 'playground/ai_short/ai_short.wav' # TODO extract from video
     video_file = 'playground/ai_short/ai_short.mp4'
     sh_script_path = 'playground/ai_short/test.sh'

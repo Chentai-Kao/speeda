@@ -127,6 +127,14 @@ Log
         to 18% (finish rendering).
       - on EC2, the rendering still takes 100% memory (fail rendering).
 
+1/7
+  - Add docstring.
+  - Try to find the best parameter for Harma.
+    - Wrote a function exp_harma() for this, test on "20_sec_ai_short.wav".
+    - Plots are saved in plots/ai_short/*
+    - Seems the original setting (NFFT=256, minDB=20, noverlap=128) works best.
+    - Finding: sometimes multiple short syllables are detected as a long one.
+
 
 
 

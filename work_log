@@ -134,6 +134,8 @@ Log
     - Plots are saved in plots/ai_short/*
     - Seems the original setting (NFFT=256, minDB=20, noverlap=128) works best.
     - Finding: sometimes multiple short syllables are detected as a long one.
+  - TODO: for the end of any segment, the split point should be after
+          the last syllable's end-time.
 
 
 

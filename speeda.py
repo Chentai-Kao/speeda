@@ -13,7 +13,16 @@ import scipy.signal
 import scipy.io.wavfile
 
 def calc_speedup_ratio(audio_file, speed):
-    '''Output speed-up ratio of each segment in the audio.'''
+    """Calculate adaptive speed-up ratio in the audio.
+
+    Args:
+        audio_file: path of the audio file.
+        speed: desired speed specified by user.
+
+    Returns:
+        An array of Segment instances, which are segments (including its own
+        speedup ratio) of this audio.
+    """
     audio, fs = load_audio(audio_file)
     # list of tuple (start, end)
     syllable_times = detect_syllables(audio, fs)
@@ -39,12 +48,22 @@ def calc_speedup_ratio(audio_file, speed):
     return segments
 
 def quantize_speedup_ratio(ratio):
-    '''Return quantized speedup ratio as multiple of 0.25. e.g. 1.25, 3.00.'''
+    """Return quantized speedup ratio as multiple of 0.25. e.g. 1.25, 3.00."""
     if ratio < 0.25:
         return 0.25
     return round(ratio * 4) / 4
 
 def detect_syllables(audio, fs):
+    """Detect syllables' timing from audio data.
+
+    Args:
+        audio: audio data.
+        fs: sampling rate of the audio.
+
+    Returns:
+        An array of tuple (start_time, end_time) of detected syllables. The
+        array is sorted chronologically by the occurence of syllables.
+    """
     syllables = harma(audio, fs)
     syllable_times = []
     for s in syllables:
@@ -54,6 +73,15 @@ def detect_syllables(audio, fs):
     return sorted(syllable_times)
 
 def harma(audio, fs):
+    """Detect syllables by the Harma algorithm.
+
+    Args:
+        audio: audio data.
+        fs: sampling rate of the audio.
+
+    Returns:
+        An array of Syllable instances, the detected syllables.
+    """
     # Parameters for harma.
     nfft = 256
     window = np.kaiser(nfft, 0.5)
@@ -133,6 +161,17 @@ def harma(audio, fs):
     return syllables
 
 def calc_vote_density(syllable_times, audio, fs):
+    """Calculate the vote density given timing of syllables.
+
+    Args:
+        syllable_times: an array of tuple (start, end), each syllable's timing.
+        audio: audio data.
+        fs: sampling rate of the audio.
+
+    Returns:
+        An array of the vote density, having the same length as the audio data.
+        The vote density is median-filtered.
+    """
     # Compute density by voting.
     voteWindow = 0.3 # in second
     vote_density = np.zeros(int(float(audio.size) / fs * 1000), # in ms
@@ -151,6 +190,14 @@ def calc_vote_density(syllable_times, audio, fs):
     return scipy.signal.medfilt(vote_density, window_size)
 
 def calc_segments(vote_density):
+    """Calculate segments from the vote density.
+
+    Args:
+        vote_density: An array of vote density (same length as the audio data).
+
+    Returns:
+        An array of segment's start time.
+    """
     # Calculate the splitting points of segments.
     seg_points = np.array([0], dtype=np.uint32)
     in_valley = True
@@ -177,6 +224,18 @@ def calc_segments(vote_density):
     return start_points
 
 def calc_ratios(start_points, syllable_density, speed, audio, fs):
+    """Calculate speedup ratio of segments.
+
+    Args:
+        start_points: an array of segment's start time.
+        syllable_density: an array of segment's syllable density.
+        speed: desired speed specified by user.
+        audio: audio data.
+        fs: sampling rate of the audio.
+
+    Returns:
+        An array of each segment's speedup ratio.
+    """
     pause_time = 150 # desired pause time (in ms)
     avg_density = np.mean(syllable_density)
     # Pause count and speak time.
@@ -205,6 +264,15 @@ def calc_ratios(start_points, syllable_density, speed, audio, fs):
     return speedup_ratio
 
 def calc_syllable_density(start_points, syllable_times):
+    """Calculate the syllable density of each segment.
+
+    Args:
+        start_points: an array of segment's start time.
+        syllable_times: an array of tuple (start, end), each syllable's timing.
+
+    Returns:
+        An array of syllable density of each segment.
+    """
     syllable_density = np.zeros(len(start_points) - 1)
     index = 0
     for i in xrange(1, len(start_points)):
@@ -218,6 +286,14 @@ def calc_syllable_density(start_points, syllable_times):
     return syllable_density
 
 def load_audio(audio_file):
+    """Load audio data given the audio file path.
+
+    Args:
+        audio_file: path of the audio file.
+
+    Returns:
+        A tuple of (data, sample_rate). The data is normalized to [-1, 1].
+    """
     # Suppress the warning from scipy loading wav audio_file.
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -227,7 +303,10 @@ def load_audio(audio_file):
     return normalized, sample_rate
 
 def pcm2float(sig, dtype='float64'):
-    """Excerpted from mgeier on Github."""
+    """Convert WAV signal from integer to float point value with range [-1, 1].
+
+    (Excerpted from mgeier on Github).
+    """
     sig = np.asarray(sig)
     if sig.dtype.kind != 'i':
         raise TypeError("'sig' must be an array of signed integers")
@@ -239,8 +318,18 @@ def pcm2float(sig, dtype='float64'):
     # Therefore, we use '-min' here to avoid clipping.
     return sig.astype(dtype) / dtype.type(-np.iinfo(sig.dtype).min)
 
-def gen_audio_segments(input_file, segments):
-    base_name, extension = os.path.splitext(input_file)
+def gen_audio_clips(audio_file, segments):
+    """Use command 'sox' to generate audio clips with adaptive speed
+        corresponding to each video segment.
+
+    Args:
+        audio_file: path of the audio file.
+        segments: an array of segments.
+
+    Returns:
+        An array of paths to the audio clip of its video segment.
+    """
+    base_name, extension = os.path.splitext(audio_file)
     audio_end = segments[-1].end
     audio_clips = []
     for i in xrange(len(segments)):
@@ -253,13 +342,23 @@ def gen_audio_segments(input_file, segments):
         if end > audio_end:
             end = audio_end
         # Run 'sox' to generate audio clips.
-        p = subprocess.call(['sox', input_file, output_file,\
+        p = subprocess.call(['sox', audio_file, output_file,\
                              'trim', '%.3f' % s.start, '=%.3f' % end,\
                              'tempo', '-s', '%.2f' % s.ratio])
     return audio_clips
 
 def render(video_file, sh_script_path, mlt_script_path, target_path,\
-                      segments, audio_clips):
+           segments, audio_clips):
+    """Generate render scripts, then render the output video.
+
+    Args:
+        video_file: path to the input video.
+        sh_script_path: path to the BASH script to be generated.
+        mlt_script_path: path to the MLT script to be generated.
+        target_path: path to the output video.
+        segments: an array of segments.
+        audio_clips: an array of paths to the audio clip of its video segment.
+    """
     # Generate BASH script.
     bash_script = gen_bash_script(mlt_script_path, target_path)
     with open(sh_script_path, 'w') as f:
@@ -273,6 +372,15 @@ def render(video_file, sh_script_path, mlt_script_path, target_path,\
     #subprocess.call(['bash', sh_script_path])
 
 def gen_bash_script(mlt_script_path, target_path):
+    """Generate and returns the BASH script used to render output video.
+
+    Args:
+        mlt_script_path: path to the MLT script to be generated.
+        target_path: path to the output video.
+
+    Returns:
+        Content of the BASH script.
+    """
     mlt_script_abs_path = os.path.abspath(mlt_script_path)
     target_abs_path = os.path.abspath(target_path)
     s = ''
@@ -289,6 +397,16 @@ def gen_bash_script(mlt_script_path, target_path):
     return s
 
 def gen_melt_script(video_file, segments, audio_clips):
+    """Generate and returns the MLT script used to render output video.
+
+    Args:
+        video_file: path to the input video.
+        segments: an array of segments.
+        audio_clips: an array of paths to the audio clip of its video segment.
+
+    Returns:
+        Content of the MLT script.
+    """
     # Some useful info.
     frame_rate, frame_length = get_video_profiles(video_file)
     video_time = segments[-1].end # video time in second.
@@ -316,16 +434,16 @@ def gen_melt_script(video_file, segments, audio_clips):
         if video_producer_id not in video_ids:
             # only create one <producer> node if same speed-up ratio.
             video_ids.add(video_producer_id)
-            video_producer = gen_producer_node(video_producer_id,\
-                                               producer_frame_length,
-                                               video_resource, is_video=True)
+            video_producer = create_producer_node(video_producer_id,\
+                                                  producer_frame_length,
+                                                  video_resource, is_video=True)
             mlt.append(video_producer)
         # Audio producer.
         audio_producer_id = 'audio_%d' % i
         audio_resource = audio_clips[i]
-        audio_producer = gen_producer_node(audio_producer_id,\
-                                           clip_frame_length,
-                                           audio_resource, is_video=False)
+        audio_producer = create_producer_node(audio_producer_id,\
+                                              clip_frame_length,
+                                              audio_resource, is_video=False)
         mlt.append(audio_producer)
         # Video clip.
         video_track.append(E('entry', {'in': str(start_frame),
@@ -352,7 +470,25 @@ def gen_melt_script(video_file, segments, audio_clips):
     mlt.append(tractor)
     return ET.tostring(mlt, pretty_print=True)
 
-def gen_producer_node(producer_id, frame_length, resource, is_video):
+def create_producer_node(producer_id, frame_length, resource, is_video):
+    """Create a <producer> node of MLT script. An example is given below.
+
+    <producer out="230" id="slowmotion:2:13.00" in="0">
+      <property name="mlt_type">producer</property>
+      <property name="length">231</property>
+      <property name="resource">ai_short.mp4?13.00</property>
+      <property name="mlt_service">framebuffer</property>
+    </producer>
+
+    Args:
+        producer_id: ID of the <producer> node.
+        frame_length: the frame length of the producer.
+        resource: path to the resource (may include speed-up info).
+        is_video: True if the producer is video. False if audio.
+
+    Returns:
+        The created <producer> node, an instance of lxml.builder.E.
+    """
     p = E('producer', {'in': '0',
                        'out': str(frame_length - 1),
                        'id': producer_id})
@@ -364,6 +500,14 @@ def gen_producer_node(producer_id, frame_length, resource, is_video):
     return p
 
 def get_video_profiles(video_file):
+    """Returns profile (info) of a video.
+
+    Args:
+        video_file: path to the video.
+
+    Returns:
+        A tuple of (frame_rate, frame_length).
+    """
     p = subprocess.Popen(['melt', video_file, '-consumer', 'xml'],
                          stdout=subprocess.PIPE)
     stdout, stderr = p.communicate()
@@ -394,6 +538,7 @@ class Segment:
                 self.start, self.end, self.ratio)
 
 if __name__ == '__main__':
+    """Main function of Speeda."""
     audio_file = 'playground/ai_short/ai_short.wav' # TODO extract from video
     video_file = 'playground/ai_short/ai_short.mp4'
     sh_script_path = 'playground/ai_short/test.sh'
@@ -401,6 +546,6 @@ if __name__ == '__main__':
     target_path = 'playground/ai_short/test.mp4'
 
     segments = calc_speedup_ratio(audio_file, 1)
-    audio_clips = gen_audio_segments(audio_file, segments)
+    audio_clips = gen_audio_clips(audio_file, segments)
     render(video_file, sh_script_path, mlt_script_path, target_path,\
            segments, audio_clips)

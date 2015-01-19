@@ -137,7 +137,17 @@ Log
   - TODO: for the end of any segment, the split point should be after
           the last syllable's end-time.
 
+1/18
+  - Try rendering full-length video.
+    - (Fixed) BUG: all segments have ratio 0.25 and 100.
+      - This bug is caused by, in batch Harma, forgetting to offset
+        the timing of detected syllables by the start of each batch.
+    - When rendering by Melt, it caused a memory error
 
+      *** Error in `/usr/bin/melt': double free or corruption (fasttop):
+      0x00007f05ae5ec9a0 ***
+
+      Seems a C++ double free error. No solution yet.
 
 
 

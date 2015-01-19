@@ -40,9 +40,10 @@ def calc_speedup_ratio(audio_file, speed):
     # Create all segments.
     segments = []
     for i in xrange(1, len(start_points)):
+        ratio = np.around(speedup_ratio[i - 1], decimals=2)
         s = Segment(float(start_points[i - 1]) / 1000,\
                     float(start_points[i]) / 1000,\
-                    np.around(speedup_ratio[i - 1], decimals=2))
+                    max(0.1, min(100, ratio)))
         segments.append(s)
     # (optional, used to lower memory requirement) quantize speedup ratio
     for s in segments:
@@ -66,13 +67,29 @@ def detect_syllables(audio, fs):
         An array of tuple (start_time, end_time) of detected syllables. The
         array is sorted chronologically by the occurence of syllables.
     """
-    syllables = harma(audio, fs)
+    syllables = harma_batch(audio, fs)
+    print len(syllables)
     syllable_times = []
     for s in syllables:
         start = np.amin(s.times)
         end = np.amax(s.times)
         syllable_times.append((start, end))
     return sorted(syllable_times)
+
+def harma_batch(audio, fs):
+    """Perform Harma in batch manner (shorter audio), so specgram() doesn't
+    run out of memory."""
+    STEP_SIZE = 5000000
+    length = audio.shape[0]
+    syllables = []
+    for start in xrange(0, length, STEP_SIZE):
+        end = min(start + STEP_SIZE, length)
+        batch_syllables = harma(audio[start:end], fs)
+        # Offset syllable time by batch's start time
+        for s in batch_syllables:
+            s.times = [t + float(start) / fs for t in s.times]
+        syllables += batch_syllables
+    return syllables
 
 def harma(audio, fs):
     """Detect syllables by the Harma algorithm.
@@ -526,7 +543,7 @@ def get_video_profiles(video_file):
 
 def exp_harma():
     """Small experiment on Harma parameters."""
-    audio_file = 'playground/ai_short/20_sec_ai_short.wav'
+    audio_file = 'playground/ai_short/ai_short.wav'
     audio, fs = load_audio(audio_file)
     syllable_times = detect_syllables(audio, fs)
     start_time = [start for (start, end) in syllable_times]
@@ -536,7 +553,7 @@ def exp_harma():
     plt.figure()
     plt.plot(start_time, [1] * len(start_time), 'ro', markersize=1)
     plt.plot(end_time, [0.9] * len(end_time), 'ro', markersize=1)
-    plt.axis([0, 20, 0, 2])
+    plt.axis([0, max(end_time), 0, 2])
     plt.title('Detected syllables (start: level 1, end: level 0.9)')
     plt.show()
 
@@ -562,11 +579,11 @@ if __name__ == '__main__':
     #exp_harma()
     #sys.exit(0)
 
-    audio_file = 'playground/ai_short/ai_short.wav' # TODO extract from video
-    video_file = 'playground/ai_short/ai_short.mp4'
-    sh_script_path = 'playground/ai_short/test.sh'
+    audio_file = 'playground/ai/ai.wav' # TODO extract from video
+    video_file = 'playground/ai/ai.mp4'
+    sh_script_path = 'playground/ai/test.sh'
     mlt_script_path = sh_script_path + '.mlt'
-    target_path = 'playground/ai_short/test.mp4'
+    target_path = 'playground/ai/test.mp4'
 
     segments = calc_speedup_ratio(audio_file, 1)
     audio_clips = gen_audio_clips(audio_file, segments)
